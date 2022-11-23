@@ -58,8 +58,9 @@ async function main() {
   chalk = (await import('chalk')).default
   fetch = (await import('node-fetch')).default
   fs = (await import('fs')).default
-  const prompt = require('prompt-sync')({ sigint: true });
-  const numberFormatter = new Intl.NumberFormat(process.env.LOCALE);
+  const prompt = require('prompt-sync')({ sigint: true })
+  const numberFormatter = new Intl.NumberFormat(process.env.LOCALE)
+  const dateFormatter = new Intl.DateTimeFormat(process.env.LOCALE)
 
   try {
     log(chalk.underline(`${app.name} v${app.version}`))
@@ -97,17 +98,26 @@ async function main() {
     log(chalk.green('Loading statments...'))
     const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
     const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
-    
+
     log(chalk.green('Writing CSV file...'))
     const stream = fs.createWriteStream(`./${start.getUTCMonth() + 1}.csv`)
     stream.once('open', () => {
+      stream.write('DATA;;\n')
+
       for (const transaction of transactions) {
-        stream.write(`${transaction.map((t) => {
+        let signal = ''
+        const line = transaction.map((t, i) => {
           if (typeof t === 'number') {
-            return numberFormatter.format(t);
+            signal = t < 0 ? '"D"' : '"C"'
+            return numberFormatter.format(t)
+          }
+          if (i === 0) {
+            return dateFormatter.format(new Date(t))
           }
           return `"${t}"`;
-        }).join(';')}\n`)
+        })
+        line.push(signal)
+        stream.write(`${line.join(';')}\n`)
       }
       stream.end()
     })
