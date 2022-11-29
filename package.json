@@ -1,15 +1,14 @@
 {
   "name": "wise-statements",
-  "version": "1.2.1",
+  "version": "2.0.0",
   "main": "app.js",
   "author": "Gilson Júnior",
   "license": "MIT",
-  "private": true,
+  "type": "module",
   "dependencies": {
     "chalk": "^5.0.1",
-    "dotenv": "^16.0.1",
-    "node-fetch": "^3.2.3",
-    "prompt-sync": "^4.2.0"
+    "commander": "^9.4.1",
+    "node-fetch": "^3.2.3"
   },
   "devDependencies": {
     "@types/node": "^17.0.23"
