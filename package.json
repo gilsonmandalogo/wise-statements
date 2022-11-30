@@ -5,6 +5,9 @@
   "author": "Gilson Júnior",
   "license": "MIT",
   "type": "module",
+  "bin": {
+    "wise-statements": "./app.js"
+  },
   "dependencies": {
     "chalk": "^5.0.1",
     "commander": "^9.4.1",
