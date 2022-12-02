@@ -1,8 +1,9 @@
 {
   "name": "wise-statements",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "main": "app.js",
-  "author": "Gilson Júnior",
+  "repository": "git@github.com:gilsonmandalogo/wise-statements.git",
+  "author": "Gilson Júnior <gilsonmandalogo@hotmail.com>",
   "license": "MIT",
   "type": "module",
   "bin": {
