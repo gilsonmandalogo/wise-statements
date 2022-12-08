@@ -80,8 +80,8 @@ function main() {
   exportCommand
     .description('Exports to a file a complete month of statements')
     .requiredOption('-k --key <file>', 'Private key file path')
-    .requiredOption('-m, --month <number>', 'Month to be exported')
-    .requiredOption('-o, --output <directory>', 'Directory to save exported files')
+    .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth() + 1))
+    .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
     .action(exportFile)
 
@@ -139,7 +139,7 @@ const exportFile = async (options) => {
       const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
 
       log(chalk.green('Writing CSV file...'))
-      const stream = fs.createWriteStream(path.resolve(output, `${start.getUTCMonth() + 1}.csv`))
+      const stream = fs.createWriteStream(path.resolve(output))
       stream.once('open', () => {
         stream.write('DATA;;\n')
 
@@ -165,7 +165,7 @@ const exportFile = async (options) => {
     if (type === 'pdf') {
       log(chalk.green('Downloading PDF...'))
       const pdf = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.pdf?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT&statementLocale=${config['pdf-locale']}`, true)
-      const stream = fs.createWriteStream(path.resolve(output, `${start.getUTCMonth() + 1}.pdf`))
+      const stream = fs.createWriteStream(path.resolve(output))
       await new Promise((resolve, reject) => {
         pdf.pipe(stream);
         pdf.on('error', reject);
