@@ -80,7 +80,7 @@ function main() {
   exportCommand
     .description('Exports to a file a complete month of statements')
     .requiredOption('-k --key <file>', 'Private key file path')
-    .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth() + 1))
+    .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
     .action(exportFile)
@@ -133,12 +133,14 @@ const exportFile = async (options) => {
     const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
     const balance = balances.find(b => b.currency === config.currency)
 
+    const parsedPath = path.parse(output)
+
     if (type === 'csv') {
       log(chalk.green('Loading statments...'))
       const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
       const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
 
-      log(chalk.green('Writing CSV file...'))
+      log(chalk.green(`Writing "${parsedPath.base}" file into "${parsedPath.dir}"...`))
       const stream = fs.createWriteStream(path.resolve(output))
       stream.once('open', () => {
         stream.write('DATA;;\n')
@@ -163,7 +165,7 @@ const exportFile = async (options) => {
     }
 
     if (type === 'pdf') {
-      log(chalk.green('Downloading PDF...'))
+      log(chalk.green(`Downloading "${parsedPath.base}" file into "${parsedPath.dir}"...`))
       const pdf = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.pdf?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT&statementLocale=${config['pdf-locale']}`, true)
       const stream = fs.createWriteStream(path.resolve(output))
       await new Promise((resolve, reject) => {
