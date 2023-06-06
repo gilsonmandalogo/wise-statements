@@ -137,13 +137,14 @@ const exportFile = async (options) => {
     const balance = balances.find(b => b.currency === exportCurrency)
 
     const parsedPath = path.parse(output)
+    const outputDir = (parsedPath.dir === '')? '.' : parsedPath.dir;
 
     if (type === 'csv') {
       log(chalk.green('Loading statments...'))
       const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
       const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
 
-      log(chalk.green(`Writing "${parsedPath.base}" file into "${parsedPath.dir}"...`))
+      log(chalk.green(`Writing "${parsedPath.base}" file into "${outputDir}"...`))
       const stream = fs.createWriteStream(path.resolve(output))
       stream.once('open', () => {
         stream.write('DATA;;\n')
@@ -168,7 +169,7 @@ const exportFile = async (options) => {
     }
 
     if (type === 'pdf') {
-      log(chalk.green(`Downloading "${parsedPath.base}" file into "${parsedPath.dir}"...`))
+      log(chalk.green(`Downloading "${parsedPath.base}" file into "${outputDir}"...`))
       const pdf = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.pdf?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT&statementLocale=${config['pdf-locale']}`, true)
       const stream = fs.createWriteStream(path.resolve(output))
       await new Promise((resolve, reject) => {
