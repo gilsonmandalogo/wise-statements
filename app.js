@@ -111,7 +111,7 @@ const exportFile = async (options) => {
       throw new Error('Invalid month')
     }
 
-    const exportCurrency = (currency === '')? config.currency : currency;
+    const exportCurrency = (currency === '')? config.currency : currency
 
     privateKeyPath = path.resolve(key)
 
@@ -136,8 +136,15 @@ const exportFile = async (options) => {
     const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
     const balance = balances.find(b => b.currency === exportCurrency)
 
-    const parsedPath = path.parse(output)
-    const outputDir = (parsedPath.dir === '')? '.' : parsedPath.dir;
+    const monthWithPadding = (start.getUTCMonth()+1).toString().padStart(2, "0")
+    const outputFileName = output
+      .replace('@c@', exportCurrency)
+      .replace('@Y@', start.getUTCFullYear())
+      .replace('@y@', start.getUTCFullYear()-2000)
+      .replace('@m@', monthWithPadding)
+      .replace('@t@', type)
+    const parsedPath = path.parse(outputFileName)
+    const outputDir = (parsedPath.dir === '')? '.' : parsedPath.dir
 
     if (type === 'csv') {
       log(chalk.green('Loading statments...'))
@@ -145,7 +152,7 @@ const exportFile = async (options) => {
       const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
 
       log(chalk.green(`Writing "${parsedPath.base}" file into "${outputDir}"...`))
-      const stream = fs.createWriteStream(path.resolve(output))
+      const stream = fs.createWriteStream(path.resolve(outputFileName))
       stream.once('open', () => {
         stream.write('DATA;;\n')
 
@@ -171,7 +178,7 @@ const exportFile = async (options) => {
     if (type === 'pdf') {
       log(chalk.green(`Downloading "${parsedPath.base}" file into "${outputDir}"...`))
       const pdf = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.pdf?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT&statementLocale=${config['pdf-locale']}`, true)
-      const stream = fs.createWriteStream(path.resolve(output))
+      const stream = fs.createWriteStream(path.resolve(outputFileName))
       await new Promise((resolve, reject) => {
         pdf.pipe(stream);
         pdf.on('error', reject);
