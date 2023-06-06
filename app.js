@@ -81,6 +81,7 @@ function main() {
     .description('Exports to a file a complete month of statements')
     .requiredOption('-k --key <file>', 'Private key file path')
     .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
+    .addOption(new Option('-c, --currency <currency>', 'Currency to be exported').default(''))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
     .action(exportFile)
@@ -103,12 +104,14 @@ const exportFile = async (options) => {
     const numberFormatter = new Intl.NumberFormat(config.locale)
     const dateFormatter = new Intl.DateTimeFormat(config.locale)
 
-    const { month, type, key, output } = options
+    const { month, type, key, output, currency } = options
     const selectedMonth = parseInt(month)
 
     if (selectedMonth === NaN) {
       throw new Error('Invalid month')
     }
+
+    const exportCurrency = (currency === '')? config.currency : currency;
 
     privateKeyPath = path.resolve(key)
 
@@ -129,9 +132,9 @@ const exportFile = async (options) => {
     const profiles = await get('/v2/profiles')
     const profile = profiles.find(p => p.fullName === config.profile)
 
-    log(chalk.green('Loading balances...'))
+    log(chalk.green(`Loading balances for ${exportCurrency}...`))
     const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
-    const balance = balances.find(b => b.currency === config.currency)
+    const balance = balances.find(b => b.currency === exportCurrency)
 
     const parsedPath = path.parse(output)
 
