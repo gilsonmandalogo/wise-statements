@@ -66,12 +66,6 @@ async function get(path, returnStream, headers) {
 }
 
 function main() {
-  fs.mkdirSync(appPath, { recursive: true })
-
-  if (!fs.existsSync(configPath)) {
-    fs.writeFileSync(configPath, '{}', 'utf-8')
-  }
-
   program
     .name(app.name)
     .version(app.version)
@@ -83,6 +77,7 @@ function main() {
     .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
+    .option('-c, --config <path>', 'Custom path for configuration file', configPath)
     .action(exportFile)
 
   const configCommand = program.command('config <name> [value]')
@@ -98,7 +93,7 @@ const exportFile = async (options) => {
     log(chalk.underline(`${app.name} v${app.version}`))
     log('')
 
-    validateConfig()
+    validateConfig(options.config)
 
     const numberFormatter = new Intl.NumberFormat(config.locale)
     const dateFormatter = new Intl.DateTimeFormat(config.locale)
@@ -191,8 +186,8 @@ const exportFile = async (options) => {
   }
 }
 
-function validateConfig() {
-  const file = fs.readFileSync(configPath, 'utf-8')
+function validateConfig(path) {
+  const file = fs.readFileSync(path, 'utf-8')
   const parsed = JSON.parse(file)
   const keys = ['api-token', 'profile', 'locale', 'pdf-locale', 'currency']
 
@@ -206,6 +201,12 @@ function validateConfig() {
 }
 
 function configAction(name, value) {
+  fs.mkdirSync(appPath, { recursive: true })
+
+  if (!fs.existsSync(configPath)) {
+    fs.writeFileSync(configPath, '{}', 'utf-8')
+  }
+
   const file = fs.readFileSync(configPath, 'utf-8')
   const parsed = JSON.parse(file)
 
