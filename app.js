@@ -81,6 +81,7 @@ function main() {
     .description('Exports to a file a complete month of statements')
     .requiredOption('-k --key <file>', 'Private key file path')
     .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
+    .option('-y, --year <number>', 'Year to be exported', String(new Date().getFullYear()))
     .addOption(new Option('-c, --currency <currency>', 'Currency to be exported').default(''))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
@@ -104,11 +105,16 @@ const exportFile = async (options) => {
     const numberFormatter = new Intl.NumberFormat(config.locale)
     const dateFormatter = new Intl.DateTimeFormat(config.locale)
 
-    const { month, type, key, output, currency } = options
+    const { month, year, type, key, output, currency } = options
     const selectedMonth = parseInt(month)
+    const selectedYear = parseInt(year)
 
-    if (selectedMonth === NaN) {
+    if (selectedMonth === NaN || selectedMonth < 1 || selectedMonth > 12) {
       throw new Error('Invalid month')
+    }
+
+    if (selectedYear === NaN || selectedYear < 2020 || selectedYear > 2100) {
+      throw new Error('Invalid year')
     }
 
     const exportCurrency = (currency === '')? config.currency : currency
@@ -117,11 +123,13 @@ const exportFile = async (options) => {
 
     const start = new Date()
     start.setMonth(selectedMonth - 1)
+    start.setFullYear(selectedYear)
     start.setUTCDate(1)
     start.setUTCHours(0, 0, 0, 0)
 
     const end = new Date(start)
     end.setUTCMonth(end.getUTCMonth() + 1)
+    start.setFullYear(selectedYear)
     end.setUTCDate(0)
     end.setUTCHours(23, 59, 59, 999)
 
