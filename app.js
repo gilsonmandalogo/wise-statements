@@ -75,6 +75,8 @@ function main() {
     .description('Exports to a file a complete month of statements')
     .requiredOption('-k --key <file>', 'Private key file path')
     .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
+    .option('-y, --year <number>', 'Year to be exported', String(new Date().getFullYear()))
+    .addOption(new Option('-c, --currency <currency>', 'Currency to be exported').default(''))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
     .option('-c, --config <path>', 'Custom path for configuration file', configPath)
@@ -98,22 +100,31 @@ const exportFile = async (options) => {
     const numberFormatter = new Intl.NumberFormat(config.locale)
     const dateFormatter = new Intl.DateTimeFormat(config.locale)
 
-    const { month, type, key, output } = options
+    const { month, year, type, key, output, currency } = options
     const selectedMonth = parseInt(month)
+    const selectedYear = parseInt(year)
 
-    if (selectedMonth === NaN) {
+    if (selectedMonth === NaN || selectedMonth < 1 || selectedMonth > 12) {
       throw new Error('Invalid month')
     }
+
+    if (selectedYear === NaN || selectedYear < 2020 || selectedYear > 2100) {
+      throw new Error('Invalid year')
+    }
+
+    const exportCurrency = (currency === '')? config.currency : currency
 
     privateKeyPath = path.resolve(key)
 
     const start = new Date()
     start.setMonth(selectedMonth - 1)
+    start.setFullYear(selectedYear)
     start.setUTCDate(1)
     start.setUTCHours(0, 0, 0, 0)
 
     const end = new Date(start)
     end.setUTCMonth(end.getUTCMonth() + 1)
+    start.setFullYear(selectedYear)
     end.setUTCDate(0)
     end.setUTCHours(23, 59, 59, 999)
 
@@ -124,19 +135,27 @@ const exportFile = async (options) => {
     const profiles = await get('/v2/profiles')
     const profile = profiles.find(p => p.fullName === config.profile)
 
-    log(chalk.green('Loading balances...'))
+    log(chalk.green(`Loading balances for ${exportCurrency}...`))
     const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
-    const balance = balances.find(b => b.currency === config.currency)
+    const balance = balances.find(b => b.currency === exportCurrency)
 
-    const parsedPath = path.parse(output)
+    const monthWithPadding = (start.getUTCMonth()+1).toString().padStart(2, "0")
+    const outputFileName = output
+      .replace('@c@', exportCurrency)
+      .replace('@Y@', start.getUTCFullYear())
+      .replace('@y@', start.getUTCFullYear()-2000)
+      .replace('@m@', monthWithPadding)
+      .replace('@t@', type)
+    const parsedPath = path.parse(outputFileName)
+    const outputDir = (parsedPath.dir === '')? '.' : parsedPath.dir
 
     if (type === 'csv') {
       log(chalk.green('Loading statments...'))
       const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
       const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
 
-      log(chalk.green(`Writing "${parsedPath.base}" file into "${parsedPath.dir}"...`))
-      const stream = fs.createWriteStream(path.resolve(output))
+      log(chalk.green(`Writing "${parsedPath.base}" file into "${outputDir}"...`))
+      const stream = fs.createWriteStream(path.resolve(outputFileName))
       stream.once('open', () => {
         stream.write('DATA;;\n')
 
@@ -160,9 +179,9 @@ const exportFile = async (options) => {
     }
 
     if (type === 'pdf') {
-      log(chalk.green(`Downloading "${parsedPath.base}" file into "${parsedPath.dir}"...`))
+      log(chalk.green(`Downloading "${parsedPath.base}" file into "${outputDir}"...`))
       const pdf = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.pdf?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT&statementLocale=${config['pdf-locale']}`, true)
-      const stream = fs.createWriteStream(path.resolve(output))
+      const stream = fs.createWriteStream(path.resolve(outputFileName))
       await new Promise((resolve, reject) => {
         pdf.pipe(stream);
         pdf.on('error', reject);
