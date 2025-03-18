@@ -7,6 +7,7 @@ import url from 'url'
 import fetch from 'node-fetch'
 import chalk from 'chalk'
 import crypto from 'crypto'
+import * as jose from 'jose'
 import { program, Option } from 'commander'
 
 const log = console.log
@@ -17,15 +18,168 @@ const app = JSON.parse(fs.readFileSync(path.resolve(dirname, 'package.json'), 'u
 const appPath = path.resolve(os.homedir(), '.config', app.name)
 const configPath = path.resolve(appPath, '.config.json')
 
-let privateKeyPath = ''
+let publicKey = null
+// let privateKey = null
+let cachedDeviceFingerprint = null
 
-function do2FA(token) {
-  const key = fs.readFileSync(privateKeyPath)
-  const signature = crypto.sign("sha256", Buffer.from(token), {
-    key,
-  });
+async function generateRsaKeyPair() {
+  log(chalk.green('Creating a new RSA key pair.'));
 
-  return signature.toString('base64')
+  const keyPair = await jose.generateKeyPair('RSA-OAEP-256', {
+    modulusLength: 2048,
+  })
+  publicKey = keyPair.publicKey
+  // privateKey = keyPair.privateKey
+
+  const publicJwk = await jose.exportJWK(publicKey)
+  // const privateJwk = await jose.exportJWK(privateKey)
+
+  fs.writeFileSync('public_key.json', JSON.stringify(publicJwk, null, 2))
+  // fs.writeFileSync('private_key.json', JSON.stringify(privateJwk, null, 2))
+
+  log(chalk.green('RSA key pair generated.'))
+  
+  await postClientPublicKey(publicJwk)
+}
+
+async function postClientPublicKey(publicJwk) {
+  // Convert the JWK to a Node.js compatible key format
+  const publicKey = crypto.createPublicKey({
+    key: {
+      kty: publicJwk.kty,
+      n: publicJwk.n,
+      e: publicJwk.e,
+    },
+    format: 'jwk',
+  })
+  
+  const derPublicKey = publicKey.export({
+    type: 'spki',
+    format: 'der',
+  })
+  
+  // Convert to base64
+  const base64DerPublicKey = derPublicKey.toString('base64')
+
+  try {
+    const response = await fetch(`${baseUrl}/v1/auth/jose/request/public-keys`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config['api-token']}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        // validFrom: new Date().toISOString(),
+        scope: 'PAYLOAD_ENCRYPTION',
+        publicKeyMaterial: {
+          algorithm: 'RSA_OAEP_256',
+          keyMaterial: base64DerPublicKey,
+        },
+      }),
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`Wise API returned ${response.status}: ${response.statusText}\n${body}`)
+    }
+
+    const body = await response.json()
+    log(chalk.green(`Public key posted to the API. Valid until ${body.validTill}.`))
+  } catch (error) {
+    log(chalk.red('Error while trying to post public key to the API.'))
+    throw error
+  }
+}
+
+async function encryptWithJwe(payload) {
+  // Check for publicKey and load or generate new key pair if needed
+  if (!publicKey) {
+    if (fs.existsSync('public_key.json')) {
+      log(chalk.green('Loading existing RSA public key.'))
+      const publicJwk = JSON.parse(fs.readFileSync('public_key.json', 'utf-8'))
+      publicKey = await jose.importJWK(publicJwk, 'RSA-OAEP-256')
+    } else {
+      await generateRsaKeyPair()
+    }
+  }
+
+  // Create a JWE using RSA-OAEP-256 for key encryption
+  const jwe = await new jose.CompactEncrypt(
+    new TextEncoder().encode(JSON.stringify(payload)),
+  )
+    .setProtectedHeader({ alg: 'RSA-OAEP-256', enc: 'A256GCM' })
+    .encrypt(publicKey)
+
+  return jwe
+}
+
+function generateDeviceFingerprint() {
+  if (cachedDeviceFingerprint) {
+    return cachedDeviceFingerprint
+  }
+
+  // Collect system-specific attributes
+  const osType = os.type() // e.g., 'Linux'
+  const osRelease = os.release() // e.g., '5.15.0-60-generic'
+  const cpuArch = os.arch() // e.g., 'x64'
+  const hostname = os.hostname() // e.g., 'my-computer'
+  const userInfo = os.userInfo().username // e.g., 'john'
+  const networkInterfaces = os.networkInterfaces()
+
+  // Extract MAC addresses from network interfaces
+  const macAddresses = Object.values(networkInterfaces)
+    .flat()
+    .filter((iface) => iface && !iface.internal && iface.mac)
+    .map((iface) => iface.mac)
+    .join(',')
+
+  // Concatenate attributes into a single string
+  const fingerprintData = `${osType}-${osRelease}-${cpuArch}-${hostname}-${userInfo}-${macAddresses}`
+
+  // Hash the concatenated string using SHA-256
+  const hash = crypto.createHash('sha256').update(fingerprintData).digest('hex')
+
+  // Cache the fingerprint for future use
+  cachedDeviceFingerprint = hash
+
+  return hash
+}
+
+async function createDeviceFingerprint(options) {
+  log(chalk.underline(`${app.name} v${app.version}`))
+  log('')
+
+  validateConfig(options.config)
+
+  try {
+    const response = await fetch(`${baseUrl}/v1/auth/jose/request/device-fingerprint`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config['api-token']}`,
+        'Content-Type': 'application/jose+json',
+        'X-TW-JOSE-Method': 'jwe',
+        'Accept': 'application/jose+json',
+        'Accept-Encoding': '*',
+      },
+      body: await encryptWithJwe({
+        deviceFingerprint: generateDeviceFingerprint(),
+      }),
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`Wise API returned ${response.status}: ${response.statusText}\n${body}`)
+    }
+
+    log(chalk.green('Device fingerprint created.'))
+  } catch (error) {
+    log(chalk.red('Error while trying to create device fingerprint.'))
+    throw error
+  }
+}
+
+function doSCA() {
+  
 }
 
 async function get(path, returnStream, headers) {
@@ -37,12 +191,12 @@ async function get(path, returnStream, headers) {
       }
     })
 
-    if (!headers && response.status === 403 && response.headers.has('x-2fa-approval')) {
-      log(chalk.gray('Signing OTT...'))
-      const token = response.headers.get('x-2fa-approval')
+    if (response.status === 403 && response.headers.get('x-2fa-approval-result') === 'REJECTED') {
+      const ott = response.headers.get('x-2fa-approval')
+      await getOTTStatus(ott)
       return await get(path, returnStream, {
         'x-2fa-approval': token,
-        'X-Signature': await do2FA(token),
+        'X-Signature': await doSCA(token),
       })
     }
 
@@ -65,6 +219,34 @@ async function get(path, returnStream, headers) {
   }
 }
 
+async function getOTTStatus(ott) {
+  try {
+    const response = await fetch(`${baseUrl}/v1/identity/one-time-token/status`, {
+      headers: {
+        'Authorization': `Bearer ${config['api-token']}`,
+        'One-Time-Token': ott,
+      }
+    })
+
+    if (!response.ok) {
+      const body = await response.text()
+      throw new Error(`Wise API returned ${response.status}: ${response.statusText}\n${body}`)
+    }
+
+    const ottResponse = await response.json()
+    
+    if (ottResponse.oneTimeTokenProperties.challenges.length > 0) {
+      log(chalk.yellow(`Challenges left to have an approved OTT: ${ottResponse.oneTimeTokenProperties.challenges.length}.`))
+    }
+
+    log(ottResponse.oneTimeTokenProperties.challenges[0].primaryChallenge)
+    throw new Error('Under construction')
+  } catch (error) {
+    log(chalk.red('Error while trying to get OTT status'))
+    throw error
+  }
+}
+
 function main() {
   program
     .name(app.name)
@@ -73,7 +255,6 @@ function main() {
   const exportCommand = program.command('export')
   exportCommand
     .description('Exports to a file a complete month of statements')
-    .requiredOption('-k --key <file>', 'Private key file path')
     .option('-m, --month <number>', 'Month to be exported', String(new Date().getMonth()))
     .requiredOption('-o, --output <path>', 'Path to save exported file')
     .addOption(new Option('-t, --type <type>', 'Type of output').default('csv').choices(['csv', 'pdf']))
@@ -85,10 +266,16 @@ function main() {
     .description('Read or set a configuration')
     .action(configAction)
 
+  const deviceFingerprintCommand = program.command('create-device-fingerprint')
+  deviceFingerprintCommand
+    .description('Creates a device fingerprint')
+    .option('-c, --config <path>', 'Custom path for configuration file', configPath)
+    .action(createDeviceFingerprint)
+
   program.parse()
 }
 
-const exportFile = async (options) => {
+async function exportFile(options) {
   try {
     log(chalk.underline(`${app.name} v${app.version}`))
     log('')
@@ -98,14 +285,12 @@ const exportFile = async (options) => {
     const numberFormatter = new Intl.NumberFormat(config.locale)
     const dateFormatter = new Intl.DateTimeFormat(config.locale)
 
-    const { month, type, key, output } = options
+    const { month, type, output } = options
     const selectedMonth = parseInt(month)
 
     if (selectedMonth === NaN) {
       throw new Error('Invalid month')
     }
-
-    privateKeyPath = path.resolve(key)
 
     const start = new Date()
     start.setMonth(selectedMonth - 1)
