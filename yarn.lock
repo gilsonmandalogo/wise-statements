@@ -3,9 +3,9 @@
 
 
 "@types/node@^18.11.11":
-  version "18.19.78"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.19.78.tgz#29f5e7b947840c7aa9050ecac920fe6b1c7646a0"
-  integrity sha512-m1ilZCTwKLkk9rruBJXFeYN0Bc5SbjirwYX/Td3MqPfioYbgun3IvK/m8dQxMCnrPGZPg1kvXjp3SIekCN/ynw==
+  version "18.19.83"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-18.19.83.tgz#44d302cd09364640bdd45d001bc75e596f7da920"
+  integrity sha512-D69JeR5SfFS5H6FLbUaS0vE4r1dGhmMBbG4Ed6BNS4wkDK8GZjsdCShT5LCN59vOHEUHnFCY9J4aclXlIphMkA==
   dependencies:
     undici-types "~5.26.4"
 
