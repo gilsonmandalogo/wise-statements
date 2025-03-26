@@ -305,20 +305,25 @@ async function exportFile(options) {
     log(chalk.gray(`From ${start.toUTCString()} to ${end.toUTCString()}`))
     log('')
 
-    log(chalk.green('Loading profiles...'))
-    const profiles = await get('/v2/profiles')
-    const profile = profiles.find(p => p.fullName === config.profile)
+    // log(chalk.green('Loading profiles...'))
+    // const profiles = await get('/v2/profiles')
+    // const profile = profiles.find(p => p.fullName === config.profile)
 
-    log(chalk.green('Loading balances...'))
-    const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
-    const balance = balances.find(b => b.currency === config.currency)
+    // log(chalk.green('Loading balances...'))
+    // const balances = await get(`/v3/profiles/${profile.id}/balances?types=STANDARD`)
+    // const balance = balances.find(b => b.currency === config.currency)
 
     const parsedPath = path.parse(output)
 
     if (type === 'csv') {
       log(chalk.green('Loading statments...'))
-      const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
-      const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
+      // const statments = await get(`/v1/profiles/${profile.id}/balance-statements/${balance.id}/statement.json?intervalStart=${start.toISOString()}&intervalEnd=${end.toISOString()}&type=FLAT`)
+      // const transactions = statments.transactions.map(t => [t.date, t.details.description, t.amount.value])
+      const csv = fs.readFileSync(path.resolve(dirname, 'template.csv'), 'utf-8').split('\n')
+      const transactions = csv.map(t => {
+        const [id, date, amount, currency, description] = t.split(',')
+        return [date, description, amount]
+      })
 
       log(chalk.green(`Writing "${parsedPath.base}" file into "${parsedPath.dir}"...`))
       const stream = fs.createWriteStream(path.resolve(output))
@@ -328,14 +333,14 @@ async function exportFile(options) {
         for (const transaction of transactions) {
           let signal = ''
           const line = transaction.map((t, i) => {
-            if (typeof t === 'number') {
+            if (i === 2) {
               signal = t < 0 ? '"D"' : '"C"'
               return numberFormatter.format(t)
             }
             if (i === 0) {
-              return dateFormatter.format(new Date(t))
+              return t
             }
-            return `"${t}"`;
+            return t;
           })
           line.push(signal)
           stream.write(`${line.join(';')}\n`)
